@@ -132,19 +132,19 @@ extern uint16_t crcAdd(uint16_t crc_val,
  * @param [in] buf The buffer used by the memory allocator.
  * @param [in] buf_len The number of blocks in buf.
  */
-CANARD_INTERNAL void initPoolAllocator(CanardPoolAllocator* allocator,
+extern void initPoolAllocator(CanardPoolAllocator* allocator,
                                        CanardPoolAllocatorBlock* buf,
                                        uint16_t buf_len);
 
 /**
  * Allocates a block from the given pool allocator.
  */
-CANARD_INTERNAL void* allocateBlock(CanardPoolAllocator* allocator);
+extern void* allocateBlock(CanardPoolAllocator* allocator);
 
 /**
  * Frees a memory block previously returned by canardAllocateBlock.
  */
-CANARD_INTERNAL void freeBlock(CanardPoolAllocator* allocator,
+extern void freeBlock(CanardPoolAllocator* allocator,
                                void* p);
 
 
