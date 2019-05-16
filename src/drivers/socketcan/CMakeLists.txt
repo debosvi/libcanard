@@ -1,0 +1,10 @@
+ 
+add_library(${DRV_SOCK_LIBNAME} STATIC 
+    socketcan.c
+)
+
+install(TARGETS ${DRV_SOCK_LIBNAME}
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+)
