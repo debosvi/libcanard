@@ -312,7 +312,7 @@ static void process1HzTasks(uint64_t timestamp_usec)
                                     UAVCAN_MY_MSG_DATA_TYPE_SIGNATURE,
                                     UAVCAN_MY_MSG_DATA_TYPE_ID,
                                     &transfer_id,
-                                    3,
+                                    CANARD_TRANSFER_PRIORITY_LOWEST,
                                     CanardResponse,
                                     &buffer[0],
                                     UAVCAN_MY_MSG_MESSAGE_SIZE);

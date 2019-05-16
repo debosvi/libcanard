@@ -789,7 +789,7 @@ uint16_t canardConvertNativeFloatToFloat16(float value)
     const union FP32 f16inf = { 31UL << 23U };
     const union FP32 magic = { 15UL << 23U };
     const uint32_t sign_mask = 0x80000000UL;
-    const uint32_t round_mask = ~0xFFFUL;
+    const uint32_t round_mask = 0xFFFUL;
 
     union FP32 in;
     in.f = value;
@@ -804,9 +804,9 @@ uint16_t canardConvertNativeFloatToFloat16(float value)
     }
     else
     {
-        in.u &= round_mask;
+        in.u &= ~round_mask;
         in.f *= magic.f;
-        in.u -= round_mask;
+        in.u -= ~round_mask;
         if (in.u > f16inf.u)
         {
             in.u = f16inf.u;
@@ -1498,44 +1498,6 @@ CANARD_INTERNAL void swapByteOrder(void* data, size_t size)
         fwd++;
         rev--;
     }
-}
-
-/*
- * CRC functions
- */
-CANARD_INTERNAL uint16_t crcAddByte(uint16_t crc_val, uint8_t byte)
-{
-    crc_val ^= (uint16_t) ((uint16_t) (byte) << 8U);
-    for (uint8_t j = 0; j < 8; j++)
-    {
-        if (crc_val & 0x8000U)
-        {
-            crc_val = (uint16_t) ((uint16_t) (crc_val << 1U) ^ 0x1021U);
-        }
-        else
-        {
-            crc_val = (uint16_t) (crc_val << 1U);
-        }
-    }
-    return crc_val;
-}
-
-CANARD_INTERNAL uint16_t crcAddSignature(uint16_t crc_val, uint64_t data_type_signature)
-{
-    for (uint16_t shift_val = 0; shift_val < 64; shift_val = (uint16_t)(shift_val + 8U))
-    {
-        crc_val = crcAddByte(crc_val, (uint8_t) (data_type_signature >> shift_val));
-    }
-    return crc_val;
-}
-
-CANARD_INTERNAL uint16_t crcAdd(uint16_t crc_val, const uint8_t* bytes, size_t len)
-{
-    while (len--)
-    {
-        crc_val = crcAddByte(crc_val, *bytes++);
-    }
-    return crc_val;
 }
 
 /*

@@ -1,5 +1,8 @@
  
 add_library(${CANARD_LIBNAME} STATIC 
+    crcAdd.c
+    crcAddByte.c
+    crcAddSignature.c
     canard.c
 )
 
