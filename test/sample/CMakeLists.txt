@@ -14,8 +14,6 @@ add_executable(${LOCAL_BINNAME}
 
 target_compile_definitions(${LOCAL_BINNAME} 
     PUBLIC GIT_HASH=0x${GIT_HASH})
-    
-# set_target_properties(${LOCAL_BINNAME} PROPERTIES COMPILE_FLAGS "-m32" LINK_FLAGS "-m32")
 
 target_link_libraries(${LOCAL_BINNAME} 
     ${CANARD_LIBNAME}
@@ -25,5 +23,5 @@ target_link_libraries(${LOCAL_BINNAME}
 install(TARGETS ${LOCAL_BINNAME}
     RUNTIME DESTINATION bin
     LIBRARY DESTINATION lib
-    ARCHIVE DESTINATION lib
+    ARCHIVE DESTINATION lib/static
 )

@@ -13,4 +13,6 @@ set(CANARD_LIBNAME canard)
 set(DRV_SOCK_LIBNAME canard_socketcan)
 
 add_subdirectory(src)
+
 add_subdirectory(test/sample)
+add_subdirectory(test/uts)
