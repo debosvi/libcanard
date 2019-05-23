@@ -12,5 +12,11 @@ endif()
 set(CANARD_LIBNAME canard)
 set(DRV_SOCK_LIBNAME canard_socketcan)
 
+if(NOT "${OPT_ROOT_DIR}" STREQUAL "")
+    message(STATUS "Use OPT_ROOT_DIR: ${OPT_ROOT_DIR}")
+    include_directories(${OPT_ROOT_DIR}/include)
+    link_directories(${OPT_ROOT_DIR}/lib/)
+endif()
+
 add_subdirectory(src)
 add_subdirectory(test/sample)
