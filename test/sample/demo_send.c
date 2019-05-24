@@ -27,6 +27,10 @@
 #define UAVCAN_MY_MSG_DATA_TYPE_ID                                  27
 #define UAVCAN_MY_MSG_DATA_TYPE_SIGNATURE                           0x5A5A5A5A5A5A5A5A
 
+#define UAVCAN_MY_MSG2_MESSAGE_SIZE                                  7
+#define UAVCAN_MY_MSG2_DATA_TYPE_ID                                  28
+#define UAVCAN_MY_MSG2_DATA_TYPE_SIGNATURE                           0x5A5A5A5A5A5A5A5A
+
 static uint8_t dest_id=0;
 static uint8_t node_id=0;
 
@@ -39,9 +43,11 @@ static uint8_t g_canard_memory_pool[1024];          ///< Arena for memory alloca
 
 // libcanard
 static unsigned char mymsg_buf[UAVCAN_MY_MSG_MESSAGE_SIZE];
+static unsigned char mymsg2_buf[UAVCAN_MY_MSG2_MESSAGE_SIZE];
 
 static const canard_item_t canard_storage[] = {
-    { .hash = UAVCAN_MY_MSG_DATA_TYPE_SIGNATURE, .id = UAVCAN_MY_MSG_DATA_TYPE_ID, .lg = UAVCAN_MY_MSG_MESSAGE_SIZE, .buf = mymsg_buf, .name = "mymsg" },
+    { .type = CanardTransferTypeResponse, .hash = UAVCAN_MY_MSG2_DATA_TYPE_SIGNATURE, .id = UAVCAN_MY_MSG2_DATA_TYPE_ID, .lg = UAVCAN_MY_MSG2_MESSAGE_SIZE, .buf = mymsg2_buf, .name = "mymsg2" },
+    { .type = CanardTransferTypeResponse, .hash = UAVCAN_MY_MSG_DATA_TYPE_SIGNATURE, .id = UAVCAN_MY_MSG_DATA_TYPE_ID, .lg = UAVCAN_MY_MSG_MESSAGE_SIZE, .buf = mymsg_buf, .name = "mymsg" },
     { .hash = 0, .id = 0, .lg = 0, .buf = 0, .name = 0}    
 };
 
@@ -67,13 +73,53 @@ static void onTransferReceived(CanardInstance* ins,
     
     printf("onTransferReceived data type %d\n", transfer->data_type_id);
     
-    if ((transfer->transfer_type == CanardTransferTypeResponse) &&
-        (transfer->data_type_id == UAVCAN_MY_MSG_DATA_TYPE_ID))
-    {
-        printf("My Msg from %d\n", transfer->source_node_id);
-        printf("My Msg data size %d\n", transfer->payload_len);
-        return;
+    canard_item_t* item=(canard_item_t*)&canard_storage[0];
+        
+    for(;;) {
+        if(!item->hash && !item->id) break;
+        
+        if ((transfer->transfer_type == item->type) &&
+            (transfer->data_type_id == item->id)) {
+            
+            const char *name="unknown";
+            if(item->name)
+                name = item->name;
+            
+            fprintf(stderr, "match message '%s'\n", name);
+        
+            unsigned int lg=transfer->payload_len;
+            if(lg>item->lg) {
+                fprintf(stderr, "payload exceeds message capability\n");
+                lg=item->lg;
+            }
+            else if(lg<item->lg) {
+                fprintf(stderr, "payload length less than expected\n");
+            }
+            
+            if(item->buf) {
+                unsigned int i=0;
+                for(; i<lg; i++) {
+                    char c;
+                    int16_t r = canardDecodeScalar(transfer, i*8U, 8U, true, &c);  
+                    if(r<8U)   
+                        fprintf(stderr, "partial byte not retrieved\n");
+                    else {
+                        *(char*)(item->buf+i) = c;
+                        fprintf(stderr, "0x%02X ", c);
+                    }
+                }
+            }
+                
+                
+                
+            printf("Msg data size %d\n", lg);
+            return;
+        }    
+        item++;
     }
+    
+        
+    
 }
 
 /**
@@ -94,13 +140,18 @@ static bool shouldAcceptTransfer(const CanardInstance* ins,
     if (canardGetLocalNodeID(ins) == CANARD_BROADCAST_NODE_ID) {
         fprintf(stderr, "node ID not set");
     }
-    else
-    {
-        if ((transfer_type == CanardTransferTypeResponse) &&
-            (data_type_id == UAVCAN_MY_MSG_DATA_TYPE_ID))
-        {
-            *out_data_type_signature = UAVCAN_MY_MSG_DATA_TYPE_SIGNATURE;
-            return true;
+    else {
+        canard_item_t* item=(canard_item_t*)&canard_storage[0];
+        
+        for(;;) {
+            if(!item->hash && !item->id) break;
+            
+            if ((transfer_type == item->type) && (data_type_id == item->id)) {
+                *out_data_type_signature = item->hash;
+                return true;
+            }
+            
+            item++;
         }
     }
 
@@ -127,8 +178,8 @@ void send_mymsg() {
     if (bc_res <= 0) {
         (void)fprintf(stderr, "Could not broadcast node status; error %d\n", bc_res);
     }
-    else
-        (void)fprintf(stderr, "my msg sent: %d\n", bc_res);
+//     else
+//         (void)fprintf(stderr, "my msg sent: %d\n", bc_res);
 }
 
 /**

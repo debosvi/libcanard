@@ -33,6 +33,7 @@ typedef uint64_t canard_hash_type_t;
 typedef uint8_t canard_length_type_t;
 
 typedef struct {
+    CanardTransferType type;
     const canard_hash_type_t hash;
     const canard_id_type_t id;
     const canard_length_type_t lg;
