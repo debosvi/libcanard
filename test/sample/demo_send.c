@@ -23,13 +23,13 @@
 
 #include <libcanard.h>
 
-#define UAVCAN_MY_MSG_MESSAGE_SIZE                                  20
-#define UAVCAN_MY_MSG_DATA_TYPE_ID                                  27
-#define UAVCAN_MY_MSG_DATA_TYPE_SIGNATURE                           0x5A5A5A5A5A5A5A5A
+#define UAVCAN_MY_MSG_MESSAGE_SIZE              20
+#define UAVCAN_MY_MSG_DATA_TYPE_ID              27
+#define UAVCAN_MY_MSG_DATA_TYPE_SIGNATURE       0x5A5A5A5A5A5A5A5A
 
-#define UAVCAN_MY_MSG2_MESSAGE_SIZE                                  7
-#define UAVCAN_MY_MSG2_DATA_TYPE_ID                                  28
-#define UAVCAN_MY_MSG2_DATA_TYPE_SIGNATURE                           0x5A5A5A5A5A5A5A5A
+#define UAVCAN_MY_MSG2_MESSAGE_SIZE             7
+#define UAVCAN_MY_MSG2_DATA_TYPE_ID             28
+#define UAVCAN_MY_MSG2_DATA_TYPE_SIGNATURE      0x1234567890987654
 
 static uint8_t dest_id=0;
 static uint8_t node_id=0;
@@ -51,6 +51,23 @@ static const canard_item_t canard_storage[] = {
     { .hash = 0, .id = 0, .lg = 0, .buf = 0, .name = 0}    
 };
 
+
+static void g_omr(const canard_id_type_t id, 
+           const void const *buf, const canard_length_type_t lg, 
+           const unsigned char const* name) {
+    
+    fprintf(stderr, "message ID '%u'\n", id);
+    fprintf(stderr, "match message '%s'\n", name);
+    fprintf(stderr, "message length '%u'\n", lg);
+    
+    unsigned int i=0;
+    for(; i<lg; i++) {
+        fprintf(stderr, "0x%02X ", *(char*)(buf+i));
+    }
+    fprintf(stderr, "\n");
+                
+}
+
 static uint64_t getMonotonicTimestampUSec(void) {
     struct timespec ts;    
     timespec_from_tain (&ts, &STAMP);    
@@ -64,14 +81,17 @@ static void onTransferReceived(CanardInstance* ins,
                                CanardRxTransfer* transfer)
 {
 
-    if (transfer->transfer_type == CanardTransferTypeResponse) 
-        printf("onTransferReceived transfer Response\n");
-    else if (transfer->transfer_type == CanardTransferTypeRequest) 
-        printf("onTransferReceived transfer Request\n");
-    else
-        printf("onTransferReceived transfer Unknown\n");
+    if (transfer->transfer_type == CanardTransferTypeResponse) {
+//         fprintf(stderr, "onTransferReceived transfer Response\n");
+    }
+    else if (transfer->transfer_type == CanardTransferTypeRequest) {
+//         fprintf(stderr, "onTransferReceived transfer Request\n");
+    }
+    else {
+        fprintf(stderr, "onTransferReceived transfer Unknown\n");
+    }
     
-    printf("onTransferReceived data type %d\n", transfer->data_type_id);
+//     fprintf(stderr, "onTransferReceived data type %d\n", transfer->data_type_id);
     
     canard_item_t* item=(canard_item_t*)&canard_storage[0];
         
@@ -84,8 +104,6 @@ static void onTransferReceived(CanardInstance* ins,
             const char *name="unknown";
             if(item->name)
                 name = item->name;
-            
-            fprintf(stderr, "match message '%s'\n", name);
         
             unsigned int lg=transfer->payload_len;
             if(lg>item->lg) {
@@ -105,14 +123,10 @@ static void onTransferReceived(CanardInstance* ins,
                         fprintf(stderr, "partial byte not retrieved\n");
                     else {
                         *(char*)(item->buf+i) = c;
-                        fprintf(stderr, "0x%02X ", c);
                     }
                 }
+                g_omr(item->id, item->buf, lg, name);
             }
-                
-                
-                
-            printf("Msg data size %d\n", lg);
             return;
         }    
         item++;
@@ -158,23 +172,25 @@ static bool shouldAcceptTransfer(const CanardInstance* ins,
     return false;
 }
 
-void send_mymsg() {
+void send_mymsg(const unsigned int idx) {
         
-    uint8_t buffer[UAVCAN_MY_MSG_MESSAGE_SIZE];
-    for(int i=0; i<UAVCAN_MY_MSG_MESSAGE_SIZE; i++)
-        buffer[i] = 0x11+i;
+    canard_item_t const *item=&canard_storage[idx];
+    const canard_length_type_t lg=item->lg;
+    uint8_t buffer[lg];
+    for(int i=0; i<lg; i++)
+        buffer[i] = node_id+i;
     
     static uint8_t transfer_id;  // Note that the transfer ID variable MUST BE STATIC (or heap-allocated)!
 
     const int16_t bc_res = canardRequestOrRespond(&g_canard,
                                 dest_id,
-                                UAVCAN_MY_MSG_DATA_TYPE_SIGNATURE,
-                                UAVCAN_MY_MSG_DATA_TYPE_ID,
+                                item->hash, 
+                                item->id,
                                 &transfer_id,
                                 CANARD_TRANSFER_PRIORITY_LOWEST,
-                                CanardResponse,
+                                item->type,
                                 &buffer[0],
-                                UAVCAN_MY_MSG_MESSAGE_SIZE);
+                                item->lg);
     if (bc_res <= 0) {
         (void)fprintf(stderr, "Could not broadcast node status; error %d\n", bc_res);
     }
@@ -234,11 +250,10 @@ static void processRxOnce(SocketCANInstance* socketcan) {
 
 int main(int argc, char** argv)
 {
-    if (argc < 4)
-    {
+    if (argc < 5) {
         (void)fprintf(stderr,
                       "Usage:\n"
-                      "\t%s <can iface name> <src_id> <dest_id>\n",
+                      "\t%s <can iface name> <src_id> <dest_id> <idx>\n",
                       argv[0]);
         return 1;
     }
@@ -293,7 +308,7 @@ int main(int argc, char** argv)
             fprintf(stderr, "iopause error");
         }
         else if(!r) {
-            send_mymsg();
+            send_mymsg(atoi(argv[4]));
             tain_add_g(&deadline, &tto) ;
         }
         else {

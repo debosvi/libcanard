@@ -33,13 +33,32 @@ typedef uint64_t canard_hash_type_t;
 typedef uint8_t canard_length_type_t;
 
 typedef struct {
-    CanardTransferType type;
+    const CanardTransferType type;
     const canard_hash_type_t hash;
     const canard_id_type_t id;
     const canard_length_type_t lg;
     void const *buf;
     const unsigned char const* name;
 } canard_item_t;
+
+// typedef void (*onMessageReceived)(
+//     const canard_id_type_t id,     
+//     const void const *buf,
+//     const canard_length_type_t lg,
+//     const unsigned char const* name); 
+// 
+// typedef enum {
+//     CANARD_DRV_SOCKET=0,
+//     CANARD_DRV_COUNT,
+//     CANARD_DRV_INVALID=255
+// } canard_driver_t;    
+//     
+// typedef struct {
+//     const canard_driver_t drv;
+//     const uint16_t node_id;
+//     const canard_item_t* const items;
+//     const onMessageReceived omsg;
+// } canard_node_t;
 
 #ifdef __cplusplus
 }
