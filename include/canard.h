@@ -183,7 +183,8 @@ typedef bool (* CanardShouldAcceptTransfer)(const CanardInstance* ins,          
  * buffer can be released and re-used by the TX queue.
  */
 typedef void (* CanardOnTransferReception)(CanardInstance* ins,                 ///< Library instance
-                                           CanardRxTransfer* transfer);         ///< Ptr to temporary transfer object
+                                           CanardRxTransfer* transfer,          ///< Ptr to temporary transfer object
+                                           const void* const item);
 
 /**
  * INTERNAL DEFINITION, DO NOT USE DIRECTLY.
@@ -430,7 +431,8 @@ void canardPopTxQueue(CanardInstance* ins);
  */
 int16_t canardHandleRxFrame(CanardInstance* ins,
                             const CanardCANFrame* frame,
-                            uint64_t timestamp_usec);
+                            uint64_t timestamp_usec,
+                            const void* const item);
 
 /**
  * Traverses the list of transfers and removes those that were last updated more than timeout_usec microseconds ago.

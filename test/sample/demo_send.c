@@ -46,19 +46,43 @@ static unsigned char mymsg_buf[UAVCAN_MY_MSG_MESSAGE_SIZE];
 static unsigned char mymsg2_buf[UAVCAN_MY_MSG2_MESSAGE_SIZE];
 
 static const canard_item_t canard_storage[] = {
-    { .type = CanardTransferTypeResponse, .hash = UAVCAN_MY_MSG2_DATA_TYPE_SIGNATURE, .id = UAVCAN_MY_MSG2_DATA_TYPE_ID, .lg = UAVCAN_MY_MSG2_MESSAGE_SIZE, .buf = mymsg2_buf, .name = "mymsg2" },
-    { .type = CanardTransferTypeResponse, .hash = UAVCAN_MY_MSG_DATA_TYPE_SIGNATURE, .id = UAVCAN_MY_MSG_DATA_TYPE_ID, .lg = UAVCAN_MY_MSG_MESSAGE_SIZE, .buf = mymsg_buf, .name = "mymsg" },
-    { .hash = 0, .id = 0, .lg = 0, .buf = 0, .name = 0}    
+    { .type = CanardTransferTypeResponse, .hash = UAVCAN_MY_MSG2_DATA_TYPE_SIGNATURE, .id = UAVCAN_MY_MSG2_DATA_TYPE_ID, .lg = UAVCAN_MY_MSG2_MESSAGE_SIZE, .buf = mymsg2_buf },
+    { .type = CanardTransferTypeResponse, .hash = UAVCAN_MY_MSG_DATA_TYPE_SIGNATURE, .id = UAVCAN_MY_MSG_DATA_TYPE_ID, .lg = UAVCAN_MY_MSG_MESSAGE_SIZE, .buf = mymsg_buf },
+    { .hash = 0, .id = 0, .lg = 0, .buf = 0}    
 };
 
+/**
+ * iopause reverse indx management.
+ */
+typedef struct {
+    unsigned int x_index;
+    const onMessageReceived on_msg;
+    void *priv;
+} iopause_item_t;
 
 static void g_omr(const canard_id_type_t id, 
            const void const *buf, const canard_length_type_t lg, 
-           const unsigned char const* name) {
+           const void const* priv) {
     
-    fprintf(stderr, "message ID '%u'\n", id);
-    fprintf(stderr, "match message '%s'\n", name);
-    fprintf(stderr, "message length '%u'\n", lg);
+    fprintf(stderr, "1: message ID '%u'\n", id);
+    fprintf(stderr, "1: message pointer '%p'\n", priv);
+    fprintf(stderr, "1: message length '%u'\n", lg);
+    
+    unsigned int i=0;
+    for(; i<lg; i++) {
+        fprintf(stderr, "0x%02X ", *(char*)(buf+i));
+    }
+    fprintf(stderr, "\n");
+                
+}
+
+static void g_omr2(const canard_id_type_t id, 
+           const void const *buf, const canard_length_type_t lg, 
+           const void const* priv) {
+    
+    fprintf(stderr, "2: message ID '%u'\n", id);
+    fprintf(stderr, "2: message pointer '%p'\n", priv);
+    fprintf(stderr, "2: message length '%u'\n", lg);
     
     unsigned int i=0;
     for(; i<lg; i++) {
@@ -78,7 +102,9 @@ static uint64_t getMonotonicTimestampUSec(void) {
  * This callback is invoked by the library when a new message or request or response is received.
  */
 static void onTransferReceived(CanardInstance* ins,
-                               CanardRxTransfer* transfer)
+                               CanardRxTransfer* transfer, 
+                               const void* const item
+                              )
 {
 
     if (transfer->transfer_type == CanardTransferTypeResponse) {
@@ -93,28 +119,24 @@ static void onTransferReceived(CanardInstance* ins,
     
 //     fprintf(stderr, "onTransferReceived data type %d\n", transfer->data_type_id);
     
-    canard_item_t* item=(canard_item_t*)&canard_storage[0];
+    canard_item_t* c_item=(canard_item_t*)&canard_storage[0];
         
     for(;;) {
-        if(!item->hash && !item->id) break;
+        if(!c_item->hash && !c_item->id) break;
         
-        if ((transfer->transfer_type == item->type) &&
-            (transfer->data_type_id == item->id)) {
+        if ((transfer->transfer_type == c_item->type) &&
+            (transfer->data_type_id == c_item->id)) {
             
-            const char *name="unknown";
-            if(item->name)
-                name = item->name;
-        
             unsigned int lg=transfer->payload_len;
-            if(lg>item->lg) {
+            if(lg>c_item->lg) {
                 fprintf(stderr, "payload exceeds message capability\n");
-                lg=item->lg;
+                lg=c_item->lg;
             }
-            else if(lg<item->lg) {
+            else if(lg<c_item->lg) {
                 fprintf(stderr, "payload length less than expected\n");
             }
             
-            if(item->buf) {
+            if(c_item->buf) {
                 unsigned int i=0;
                 for(; i<lg; i++) {
                     char c;
@@ -122,14 +144,16 @@ static void onTransferReceived(CanardInstance* ins,
                     if(r<8U)   
                         fprintf(stderr, "partial byte not retrieved\n");
                     else {
-                        *(char*)(item->buf+i) = c;
+                        *(char*)(c_item->buf+i) = c;
                     }
                 }
-                g_omr(item->id, item->buf, lg, name);
+                
+                const iopause_item_t* const p=(iopause_item_t*)item;
+                p->on_msg(c_item->id, c_item->buf, lg, p->priv);
             }
             return;
         }    
-        item++;
+        c_item++;
     }
     
         
@@ -201,8 +225,7 @@ void send_mymsg(const unsigned int idx) {
 /**
  * Transmits all frames from the TX queue, receives up to one frame.
  */
-static void processTxOnce(SocketCANInstance* socketcan)
-{
+static void processTxOnce(SocketCANInstance* socketcan) {
     const CanardCANFrame* txf = NULL;
     
     // Transmitting
@@ -228,7 +251,7 @@ static void processTxOnce(SocketCANInstance* socketcan)
     }
 }
 
-static void processRxOnce(SocketCANInstance* socketcan) {
+static void processRxOnce(SocketCANInstance* socketcan, iopause_item_t *item) {
     // Receiving
     CanardCANFrame rx_frame;
     const uint64_t timestamp = getMonotonicTimestampUSec();
@@ -239,7 +262,7 @@ static void processRxOnce(SocketCANInstance* socketcan) {
     }
     else if (rx_res > 0)        // Success - process the frame
     {
-        canardHandleRxFrame(&g_canard, &rx_frame, timestamp);
+        canardHandleRxFrame(&g_canard, &rx_frame, timestamp, item);
     }
     else
     {
@@ -247,6 +270,10 @@ static void processRxOnce(SocketCANInstance* socketcan) {
     }
 }
 
+iopause_item_t g_io_items[] = {
+    { .x_index=-1, .on_msg=g_omr, .priv=mymsg_buf },
+    { .x_index=-1, .on_msg=g_omr2, .priv=mymsg2_buf }
+};
 
 int main(int argc, char** argv)
 {
@@ -296,6 +323,8 @@ int main(int argc, char** argv)
     tain_now_g();
     tain_add_g(&deadline, &tto) ;
 
+    g_io_items[0].x_index=0;
+    
     for(;;) {
         iopause_fd x[2];
         
@@ -312,11 +341,11 @@ int main(int argc, char** argv)
             tain_add_g(&deadline, &tto) ;
         }
         else {
-            if(x[0].revents & IOPAUSE_WRITE) {
+            if(x[g_io_items[0].x_index].revents & IOPAUSE_WRITE) {
                 processTxOnce(&socketcan);
             }
-            else if(x[0].revents & IOPAUSE_READ) {
-                processRxOnce(&socketcan);
+            else if(x[g_io_items[0].x_index].revents & IOPAUSE_READ) {
+                processRxOnce(&socketcan, &g_io_items[0]);
             }
             
             

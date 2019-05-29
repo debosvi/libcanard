@@ -28,25 +28,24 @@
 extern "C" {
 #endif
 
-typedef uint8_t canard_id_type_t;
+typedef uint16_t canard_id_type_t;
 typedef uint64_t canard_hash_type_t;
-typedef uint8_t canard_length_type_t;
+typedef size_t canard_length_type_t;
 
 typedef struct {
     const CanardTransferType type;
     const canard_hash_type_t hash;
     const canard_id_type_t id;
     const canard_length_type_t lg;
-    void const *buf;
-    const unsigned char const* name;
+    void* const buf;
 } canard_item_t;
 
-// typedef void (*onMessageReceived)(
-//     const canard_id_type_t id,     
-//     const void const *buf,
-//     const canard_length_type_t lg,
-//     const unsigned char const* name); 
-// 
+typedef void (*onMessageReceived)(
+    const canard_id_type_t id,     
+    const void* const buf,
+    const canard_length_type_t lg,
+    const void* const priv); 
+
 // typedef enum {
 //     CANARD_DRV_SOCKET=0,
 //     CANARD_DRV_COUNT,

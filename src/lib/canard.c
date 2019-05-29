@@ -248,7 +248,8 @@ void canardPopTxQueue(CanardInstance* ins)
     freeBlock(&ins->allocator, item);
 }
 
-int16_t canardHandleRxFrame(CanardInstance* ins, const CanardCANFrame* frame, uint64_t timestamp_usec)
+int16_t canardHandleRxFrame(CanardInstance* ins, const CanardCANFrame* frame, 
+                            uint64_t timestamp_usec, const void* const item)
 {
     const CanardTransferType transfer_type = extractTransferType(frame->id);
     const uint8_t destination_node_id = (transfer_type == CanardTransferTypeBroadcast) ?
@@ -351,7 +352,7 @@ int16_t canardHandleRxFrame(CanardInstance* ins, const CanardCANFrame* frame, ui
             .source_node_id = source_node_id
         };
 
-        ins->on_reception(ins, &rx_transfer);
+        ins->on_reception(ins, &rx_transfer, item);
 
         prepareForNextTransfer(rx_state);
         return CANARD_OK;
@@ -462,7 +463,7 @@ int16_t canardHandleRxFrame(CanardInstance* ins, const CanardCANFrame* frame, ui
         rx_state->calculated_crc = crcAdd((uint16_t)rx_state->calculated_crc, frame->data, frame->data_len - 1U);
         if (rx_state->calculated_crc == rx_state->payload_crc)
         {
-            ins->on_reception(ins, &rx_transfer);
+            ins->on_reception(ins, &rx_transfer, item);
         }
 
         // Making sure the payload is released even if the application didn't bother with it
