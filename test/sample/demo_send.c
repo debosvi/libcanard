@@ -24,11 +24,11 @@
 #include <libcanard.h>
 
 #define UAVCAN_MY_MSG_MESSAGE_SIZE              20
-#define UAVCAN_MY_MSG_DATA_TYPE_ID              27
+#define UAVCAN_MY_MSG_DATA_TYPE_ID              49876
 #define UAVCAN_MY_MSG_DATA_TYPE_SIGNATURE       0x5A5A5A5A5A5A5A5A
 
 #define UAVCAN_MY_MSG2_MESSAGE_SIZE             7
-#define UAVCAN_MY_MSG2_DATA_TYPE_ID             28
+#define UAVCAN_MY_MSG2_DATA_TYPE_ID             65
 #define UAVCAN_MY_MSG2_DATA_TYPE_SIGNATURE      0x1234567890987654
 
 static uint8_t dest_id=0;
@@ -47,7 +47,7 @@ static unsigned char mymsg2_buf[UAVCAN_MY_MSG2_MESSAGE_SIZE];
 
 static const canard_item_t canard_storage[] = {
     { .type = CanardTransferTypeResponse, .hash = UAVCAN_MY_MSG2_DATA_TYPE_SIGNATURE, .id = UAVCAN_MY_MSG2_DATA_TYPE_ID, .lg = UAVCAN_MY_MSG2_MESSAGE_SIZE, .buf = mymsg2_buf },
-    { .type = CanardTransferTypeResponse, .hash = UAVCAN_MY_MSG_DATA_TYPE_SIGNATURE, .id = UAVCAN_MY_MSG_DATA_TYPE_ID, .lg = UAVCAN_MY_MSG_MESSAGE_SIZE, .buf = mymsg_buf },
+    { .type = CanardTransferTypeBroadcast, .hash = UAVCAN_MY_MSG_DATA_TYPE_SIGNATURE, .id = UAVCAN_MY_MSG_DATA_TYPE_ID, .lg = UAVCAN_MY_MSG_MESSAGE_SIZE, .buf = mymsg_buf },
     { .hash = 0, .id = 0, .lg = 0, .buf = 0}    
 };
 
@@ -113,6 +113,9 @@ static void onTransferReceived(CanardInstance* ins,
     else if (transfer->transfer_type == CanardTransferTypeRequest) {
 //         fprintf(stderr, "onTransferReceived transfer Request\n");
     }
+    else if (transfer->transfer_type == CanardTransferTypeBroadcast) {
+//         fprintf(stderr, "onTransferReceived transfer Broadcast\n");
+    }
     else {
         fprintf(stderr, "onTransferReceived transfer Unknown\n");
     }
@@ -173,6 +176,7 @@ static bool shouldAcceptTransfer(const CanardInstance* ins,
                                  CanardTransferType transfer_type,
                                  uint8_t source_node_id)
 {
+    fprintf(stderr, "%s: data ID %d\n",  __PRETTY_FUNCTION__, data_type_id);
     (void)source_node_id;
 
     if (canardGetLocalNodeID(ins) == CANARD_BROADCAST_NODE_ID) {
@@ -197,7 +201,7 @@ static bool shouldAcceptTransfer(const CanardInstance* ins,
 }
 
 void send_mymsg(const unsigned int idx) {
-        
+    int16_t bc_res=0;    
     canard_item_t const *item=&canard_storage[idx];
     const canard_length_type_t lg=item->lg;
     uint8_t buffer[lg];
@@ -206,15 +210,28 @@ void send_mymsg(const unsigned int idx) {
     
     static uint8_t transfer_id;  // Note that the transfer ID variable MUST BE STATIC (or heap-allocated)!
 
-    const int16_t bc_res = canardRequestOrRespond(&g_canard,
-                                dest_id,
-                                item->hash, 
-                                item->id,
-                                &transfer_id,
-                                CANARD_TRANSFER_PRIORITY_LOWEST,
-                                item->type,
-                                &buffer[0],
-                                item->lg);
+    if( (item->type == CanardTransferTypeResponse) ||
+        (item->type == CanardTransferTypeRequest) ) {
+        bc_res = canardRequestOrRespond(&g_canard,
+                dest_id,
+                item->hash, 
+                item->id,
+                &transfer_id,
+                CANARD_TRANSFER_PRIORITY_LOWEST,
+                item->type,
+                &buffer[0],
+                item->lg);
+    }
+    else if(item->type == CanardTransferTypeBroadcast) {
+        bc_res = canardBroadcast(&g_canard,
+                item->hash, 
+                item->id,
+                &transfer_id,
+                CANARD_TRANSFER_PRIORITY_LOWEST,
+                &buffer[0],
+                item->lg);
+    }
+    
     if (bc_res <= 0) {
         (void)fprintf(stderr, "Could not broadcast node status; error %d\n", bc_res);
     }
