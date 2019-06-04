@@ -22,18 +22,46 @@
 #ifndef __LIBCANARD_H__
 #define __LIBCANARD_H__
 
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+/**
+ * This data type holds a standard CAN 2.0B data frame with 29-bit ID.
+ */
+typedef struct
+{
+    /**
+     * Refer to the following definitions:
+     *  - CANARD_CAN_FRAME_EFF
+     *  - CANARD_CAN_FRAME_RTR
+     *  - CANARD_CAN_FRAME_ERR
+     */
+    uint32_t id;
+    uint8_t data[8];
+    uint8_t data_len;
+} CAN_frame_t;
+    
+/**
+ * Transfer types are defined by the UAVCAN specification.
+ */
+typedef enum
+{
+    TRANSFER_RESPONSE  = 0,
+    TRANSFER_REQUEST,
+    TRANSFER_BROADCAST,
+    TRANSFER_COUNT
+} canard_transfer_t;
+
 typedef uint16_t canard_id_type_t;
 typedef uint64_t canard_hash_type_t;
 typedef size_t canard_length_type_t;
 
 typedef struct {
-    const CanardTransferType type;
+    const canard_transfer_t type;
     const canard_hash_type_t hash;
     const canard_id_type_t id;
     const canard_length_type_t lg;

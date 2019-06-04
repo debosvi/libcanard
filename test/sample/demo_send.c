@@ -46,8 +46,8 @@ static unsigned char mymsg_buf[UAVCAN_MY_MSG_MESSAGE_SIZE];
 static unsigned char mymsg2_buf[UAVCAN_MY_MSG2_MESSAGE_SIZE];
 
 static const canard_item_t canard_storage[] = {
-    { .type = CanardTransferTypeResponse, .hash = UAVCAN_MY_MSG2_DATA_TYPE_SIGNATURE, .id = UAVCAN_MY_MSG2_DATA_TYPE_ID, .lg = UAVCAN_MY_MSG2_MESSAGE_SIZE, .buf = mymsg2_buf },
-    { .type = CanardTransferTypeBroadcast, .hash = UAVCAN_MY_MSG_DATA_TYPE_SIGNATURE, .id = UAVCAN_MY_MSG_DATA_TYPE_ID, .lg = UAVCAN_MY_MSG_MESSAGE_SIZE, .buf = mymsg_buf },
+    { .type = TRANSFER_RESPONSE, .hash = UAVCAN_MY_MSG2_DATA_TYPE_SIGNATURE, .id = UAVCAN_MY_MSG2_DATA_TYPE_ID, .lg = UAVCAN_MY_MSG2_MESSAGE_SIZE, .buf = mymsg2_buf },
+    { .type = TRANSFER_BROADCAST, .hash = UAVCAN_MY_MSG_DATA_TYPE_SIGNATURE, .id = UAVCAN_MY_MSG_DATA_TYPE_ID, .lg = UAVCAN_MY_MSG_MESSAGE_SIZE, .buf = mymsg_buf },
     { .hash = 0, .id = 0, .lg = 0, .buf = 0}    
 };
 
@@ -106,14 +106,13 @@ static void onTransferReceived(CanardInstance* ins,
                                const void* const item
                               )
 {
-
-    if (transfer->transfer_type == CanardTransferTypeResponse) {
+    if (transfer->transfer_type == TRANSFER_RESPONSE) {
 //         fprintf(stderr, "onTransferReceived transfer Response\n");
     }
-    else if (transfer->transfer_type == CanardTransferTypeRequest) {
+    else if (transfer->transfer_type == TRANSFER_REQUEST) {
 //         fprintf(stderr, "onTransferReceived transfer Request\n");
     }
-    else if (transfer->transfer_type == CanardTransferTypeBroadcast) {
+    else if (transfer->transfer_type == TRANSFER_BROADCAST) {
 //         fprintf(stderr, "onTransferReceived transfer Broadcast\n");
     }
     else {
@@ -125,6 +124,7 @@ static void onTransferReceived(CanardInstance* ins,
     canard_item_t* c_item=(canard_item_t*)&canard_storage[0];
         
     for(;;) {
+//         fprintf(stderr, "onTransferReceived loop, type(%d), id(%d)\n", c_item->type, c_item->id);
         if(!c_item->hash && !c_item->id) break;
         
         if ((transfer->transfer_type == c_item->type) &&
@@ -145,7 +145,7 @@ static void onTransferReceived(CanardInstance* ins,
                     char c;
                     int16_t r = canardDecodeScalar(transfer, i*8U, 8U, true, &c);  
                     if(r<8U)   
-                        fprintf(stderr, "partial byte not retrieved\n");
+                        fprintf(stderr, "partial byte not retrieved, err(%d), idx(%d)\n", r, i);
                     else {
                         *(char*)(c_item->buf+i) = c;
                     }
@@ -157,10 +157,9 @@ static void onTransferReceived(CanardInstance* ins,
             return;
         }    
         c_item++;
-    }
+    }    
     
-        
-    
+    fprintf(stderr, "onTransferReceived no msg type found\n");
 }
 
 /**
@@ -173,10 +172,10 @@ static void onTransferReceived(CanardInstance* ins,
 static bool shouldAcceptTransfer(const CanardInstance* ins,
                                  uint64_t* out_data_type_signature,
                                  uint16_t data_type_id,
-                                 CanardTransferType transfer_type,
+                                 const canard_transfer_t transfer_type,
                                  uint8_t source_node_id)
 {
-    fprintf(stderr, "%s: data ID %d\n",  __PRETTY_FUNCTION__, data_type_id);
+//     fprintf(stderr, "%s: data ID %d\n",  __PRETTY_FUNCTION__, data_type_id);
     (void)source_node_id;
 
     if (canardGetLocalNodeID(ins) == CANARD_BROADCAST_NODE_ID) {
@@ -210,8 +209,8 @@ void send_mymsg(const unsigned int idx) {
     
     static uint8_t transfer_id;  // Note that the transfer ID variable MUST BE STATIC (or heap-allocated)!
 
-    if( (item->type == CanardTransferTypeResponse) ||
-        (item->type == CanardTransferTypeRequest) ) {
+    if( (item->type == TRANSFER_RESPONSE) ||
+        (item->type == TRANSFER_REQUEST) ) {
         bc_res = canardRequestOrRespond(&g_canard,
                 dest_id,
                 item->hash, 
@@ -222,7 +221,7 @@ void send_mymsg(const unsigned int idx) {
                 &buffer[0],
                 item->lg);
     }
-    else if(item->type == CanardTransferTypeBroadcast) {
+    else if(item->type == TRANSFER_BROADCAST) {
         bc_res = canardBroadcast(&g_canard,
                 item->hash, 
                 item->id,
@@ -233,7 +232,7 @@ void send_mymsg(const unsigned int idx) {
     }
     
     if (bc_res <= 0) {
-        (void)fprintf(stderr, "Could not broadcast node status; error %d\n", bc_res);
+        fprintf(stderr, "Could not broadcast node status; error %d\n", bc_res);
     }
 //     else
 //         (void)fprintf(stderr, "my msg sent: %d\n", bc_res);
@@ -242,8 +241,8 @@ void send_mymsg(const unsigned int idx) {
 /**
  * Transmits all frames from the TX queue, receives up to one frame.
  */
-static void processTxOnce(SocketCANInstance* socketcan) {
-    const CanardCANFrame* txf = NULL;
+static void processTxOnce(socketcan_drv_t* const socketcan) {
+    const CAN_frame_t* txf = NULL;
     
     // Transmitting
     for (; (txf = canardPeekTxQueue(&g_canard)) != NULL;)
@@ -252,7 +251,7 @@ static void processTxOnce(SocketCANInstance* socketcan) {
         if (tx_res < 0)         // Failure - drop the frame and report
         {
             canardPopTxQueue(&g_canard);
-            (void)fprintf(stderr, "Transmit error %d, frame dropped, errno '%s'\n", tx_res, strerror(errno));
+            fprintf(stderr, "Transmit error %d, frame dropped, errno '%s'\n", tx_res, strerror(errno));
         }
         else if (tx_res > 0)    // Success - just drop the frame
         {
@@ -268,18 +267,24 @@ static void processTxOnce(SocketCANInstance* socketcan) {
     }
 }
 
-static void processRxOnce(SocketCANInstance* socketcan, iopause_item_t *item) {
+static void processRxOnce(socketcan_drv_t* const socketcan, iopause_item_t *item) {
     // Receiving
-    CanardCANFrame rx_frame;
+    CAN_frame_t rx_frame;
     const uint64_t timestamp = getMonotonicTimestampUSec();
     const int16_t rx_res = socketcanReceive(socketcan, &rx_frame, 0);
     if (rx_res < 0)             // Failure - report
     {
-        (void)fprintf(stderr, "Receive error %d, errno '%s'\n", rx_res, strerror(errno));
+        fprintf(stderr, "Receive error %d, errno '%s'\n", rx_res, strerror(errno));
     }
     else if (rx_res > 0)        // Success - process the frame
     {
-        canardHandleRxFrame(&g_canard, &rx_frame, timestamp, item);
+        const int16_t r=canardHandleRxFrame(&g_canard, &rx_frame, timestamp, item);
+        if(r<0)
+            fprintf(stderr, "canardHandleRxFrame error %d\n", r);
+//         else if(!r)
+//             fprintf(stderr, "canardHandleRxFrame no error\n");
+        else if(r>0)
+            fprintf(stderr, "canardHandleRxFrame status unknown %d\n", r);
     }
     else
     {
@@ -287,7 +292,7 @@ static void processRxOnce(SocketCANInstance* socketcan, iopause_item_t *item) {
     }
 }
 
-iopause_item_t g_io_items[] = {
+static iopause_item_t g_io_items[] = {
     { .x_index=-1, .on_msg=g_omr, .priv=mymsg_buf },
     { .x_index=-1, .on_msg=g_omr2, .priv=mymsg2_buf }
 };
@@ -305,7 +310,7 @@ int main(int argc, char** argv)
     /*
      * Initializing the CAN backend driver; in this example we're using SocketCAN
      */
-    SocketCANInstance socketcan;
+    socketcan_drv_t socketcan;
     const char* const can_iface_name = argv[1];
     int16_t res = socketcanInit(&socketcan, can_iface_name);
     if (res < 0)

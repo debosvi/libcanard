@@ -39,12 +39,12 @@ static int16_t getErrorCode()
     }
     else
     {
-        assert(false);          // Requested an error when errno is zero?
+//         assert(false);          // Requested an error when errno is zero?
         return INT16_MIN;
     }
 }
 
-int16_t socketcanInit(SocketCANInstance* out_ins, const char* can_iface_name)
+int16_t socketcanInit(socketcan_drv_t* out_ins, const char* can_iface_name)
 {
     const size_t iface_name_size = strlen(can_iface_name) + 1;
     if (iface_name_size > IFNAMSIZ)
@@ -88,14 +88,14 @@ fail0:
     return getErrorCode();
 }
 
-int16_t socketcanClose(SocketCANInstance* ins)
+int16_t socketcanClose(socketcan_drv_t* ins)
 {
     const int close_result = close(ins->fd);
     ins->fd = -1;
     return (int16_t)((close_result == 0) ? 0 : getErrorCode());
 }
 
-int16_t socketcanTransmit(SocketCANInstance* ins, const CanardCANFrame* frame, int32_t timeout_msec)
+int16_t socketcanTransmit(socketcan_drv_t* ins, const CAN_frame_t* frame, int32_t timeout_msec)
 {
     struct pollfd fds;
     memset(&fds, 0, sizeof(fds));
@@ -135,7 +135,7 @@ int16_t socketcanTransmit(SocketCANInstance* ins, const CanardCANFrame* frame, i
     return 1;
 }
 
-int16_t socketcanReceive(SocketCANInstance* ins, CanardCANFrame* out_frame, int32_t timeout_msec)
+int16_t socketcanReceive(socketcan_drv_t* ins, CAN_frame_t* out_frame, int32_t timeout_msec)
 {
     struct pollfd fds;
     memset(&fds, 0, sizeof(fds));
@@ -179,7 +179,7 @@ int16_t socketcanReceive(SocketCANInstance* ins, CanardCANFrame* out_frame, int3
     return 1;
 }
 
-int socketcanGetSocketFileDescriptor(const SocketCANInstance* ins)
+int socketcanGetSocketFileDescriptor(const socketcan_drv_t* ins)
 {
     return ins->fd;
 }
