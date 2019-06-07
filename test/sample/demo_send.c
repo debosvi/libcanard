@@ -27,7 +27,7 @@
 #define UAVCAN_MY_MSG_DATA_TYPE_ID              49876
 #define UAVCAN_MY_MSG_DATA_TYPE_SIGNATURE       0x5A5A5A5A5A5A5A5A
 
-#define UAVCAN_MY_MSG2_MESSAGE_SIZE             7
+#define UAVCAN_MY_MSG2_MESSAGE_SIZE             8
 #define UAVCAN_MY_MSG2_DATA_TYPE_ID             65
 #define UAVCAN_MY_MSG2_DATA_TYPE_SIGNATURE      0x1234567890987654
 
@@ -43,13 +43,17 @@ static uint8_t g_canard_memory_pool[1024];          ///< Arena for memory alloca
 
 // libcanard
 static unsigned char mymsg_buf[UAVCAN_MY_MSG_MESSAGE_SIZE];
-static unsigned char mymsg2_buf[UAVCAN_MY_MSG2_MESSAGE_SIZE];
+static unsigned char mymsg2_req_buf[UAVCAN_MY_MSG2_MESSAGE_SIZE];
+static unsigned char mymsg2_rep_buf[UAVCAN_MY_MSG2_MESSAGE_SIZE];
 
 static const canard_item_t canard_storage[] = {
-    { .type = TRANSFER_RESPONSE, .hash = UAVCAN_MY_MSG2_DATA_TYPE_SIGNATURE, .id = UAVCAN_MY_MSG2_DATA_TYPE_ID, .lg = UAVCAN_MY_MSG2_MESSAGE_SIZE, .buf = mymsg2_buf },
+    { .type = TRANSFER_REQUEST, .hash = UAVCAN_MY_MSG2_DATA_TYPE_SIGNATURE, .id = UAVCAN_MY_MSG2_DATA_TYPE_ID, .lg = UAVCAN_MY_MSG2_MESSAGE_SIZE, .buf = mymsg2_req_buf },
+    { .type = TRANSFER_RESPONSE, .hash = UAVCAN_MY_MSG2_DATA_TYPE_SIGNATURE, .id = UAVCAN_MY_MSG2_DATA_TYPE_ID, .lg = UAVCAN_MY_MSG2_MESSAGE_SIZE, .buf = mymsg2_rep_buf },
     { .type = TRANSFER_BROADCAST, .hash = UAVCAN_MY_MSG_DATA_TYPE_SIGNATURE, .id = UAVCAN_MY_MSG_DATA_TYPE_ID, .lg = UAVCAN_MY_MSG_MESSAGE_SIZE, .buf = mymsg_buf },
     { .hash = 0, .id = 0, .lg = 0, .buf = 0}    
 };
+
+static void send_mymsg(const unsigned int idx);
 
 /**
  * iopause reverse indx management.
@@ -80,9 +84,25 @@ static void g_omr2(const canard_id_type_t id,
            const void const *buf, const canard_length_type_t lg, 
            const void const* priv) {
     
-    fprintf(stderr, "2: message ID '%u'\n", id);
+    fprintf(stderr, "2: message ID req '%u'\n", id);
     fprintf(stderr, "2: message pointer '%p'\n", priv);
     fprintf(stderr, "2: message length '%u'\n", lg);
+    
+    unsigned int i=0;
+    for(; i<lg; i++) {
+        fprintf(stderr, "0x%02X ", *(char*)(buf+i));
+    }
+    fprintf(stderr, "\n");
+                
+}
+
+static void g_omr3(const canard_id_type_t id, 
+           const void const *buf, const canard_length_type_t lg, 
+           const void const* priv) {
+    
+    fprintf(stderr, "3: message ID rep '%u'\n", id);
+    fprintf(stderr, "3: message pointer '%p'\n", priv);
+    fprintf(stderr, "3: message length '%u'\n", lg);
     
     unsigned int i=0;
     for(; i<lg; i++) {
@@ -153,6 +173,11 @@ static void onTransferReceived(CanardInstance* ins,
                 
                 const iopause_item_t* const p=(iopause_item_t*)item;
                 p->on_msg(c_item->id, c_item->buf, lg, p->priv);
+                
+                if(c_item->type == TRANSFER_REQUEST) {
+                    fprintf(stderr, "reply to ID %d\n", c_item->id);
+                    send_mymsg(1);
+                }
             }
             return;
         }    
@@ -280,7 +305,9 @@ static void processRxOnce(socketcan_drv_t* const socketcan, iopause_item_t *item
     {
         const int16_t r=canardHandleRxFrame(&g_canard, &rx_frame, timestamp, item);
         if(r<0)
-            fprintf(stderr, "canardHandleRxFrame error %d\n", r);
+            if(r!=-CANARD_ERROR_RX_WRONG_ADDRESS)
+                fprintf(stderr, "canardHandleRxFrame error %d\n", r);
+            
 //         else if(!r)
 //             fprintf(stderr, "canardHandleRxFrame no error\n");
         else if(r>0)
@@ -294,13 +321,14 @@ static void processRxOnce(socketcan_drv_t* const socketcan, iopause_item_t *item
 
 static iopause_item_t g_io_items[] = {
     { .x_index=-1, .on_msg=g_omr, .priv=mymsg_buf },
-    { .x_index=-1, .on_msg=g_omr2, .priv=mymsg2_buf }
+    { .x_index=-1, .on_msg=g_omr2, .priv=mymsg2_req_buf },
+    { .x_index=-1, .on_msg=g_omr3, .priv=mymsg2_rep_buf },
 };
 
 int main(int argc, char** argv)
 {
     if (argc < 5) {
-        (void)fprintf(stderr,
+        fprintf(stderr,
                       "Usage:\n"
                       "\t%s <can iface name> <src_id> <dest_id> <idx>\n",
                       argv[0]);
@@ -315,7 +343,7 @@ int main(int argc, char** argv)
     int16_t res = socketcanInit(&socketcan, can_iface_name);
     if (res < 0)
     {
-        (void)fprintf(stderr, "Failed to open CAN iface '%s'\n", can_iface_name);
+        fprintf(stderr, "Failed to open CAN iface '%s'\n", can_iface_name);
         return 1;
     }
 
@@ -334,7 +362,14 @@ int main(int argc, char** argv)
     
     node_id=atoi(can_node_id);
     dest_id=atoi(can_dest_id);
-
+    int g_idx=atoi(argv[4]);
+    
+    if((g_idx<0) || (g_idx>2)) {
+        fprintf(stderr, "Index must be in [0:2]\n");
+        return 1;
+    }
+        
+    
     canardSetLocalNodeID(&g_canard, node_id);
     printf("Dynamic node ID allocation complete [%d]\n", canardGetLocalNodeID(&g_canard));
 
@@ -346,6 +381,8 @@ int main(int argc, char** argv)
     tain_add_g(&deadline, &tto) ;
 
     g_io_items[0].x_index=0;
+    g_io_items[1].x_index=0;
+    g_io_items[2].x_index=0;
     
     for(;;) {
         iopause_fd x[2];
@@ -359,7 +396,7 @@ int main(int argc, char** argv)
             fprintf(stderr, "iopause error");
         }
         else if(!r) {
-            send_mymsg(atoi(argv[4]));
+            send_mymsg(g_idx);
             tain_add_g(&deadline, &tto) ;
         }
         else {
@@ -367,7 +404,7 @@ int main(int argc, char** argv)
                 processTxOnce(&socketcan);
             }
             else if(x[g_io_items[0].x_index].revents & IOPAUSE_READ) {
-                processRxOnce(&socketcan, &g_io_items[0]);
+                processRxOnce(&socketcan, &g_io_items[g_idx]);
             }
             
             
