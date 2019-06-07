@@ -1,4 +1,6 @@
- 
+
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 add_library(${CANARD_LIBNAME} STATIC 
     # CRC
     crcAdd.c
@@ -10,6 +12,7 @@ add_library(${CANARD_LIBNAME} STATIC
     freeBlock.c
     initPoolAllocator.c
     
+    convert_float.c
     canard.c
 )
 
