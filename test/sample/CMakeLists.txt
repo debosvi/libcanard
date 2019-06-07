@@ -20,6 +20,7 @@ target_compile_definitions(${LOCAL_BINNAME}
 target_link_libraries(${LOCAL_BINNAME} 
     ${CANARD_LIBNAME}
     ${DRV_SOCK_LIBNAME}
+    skarnet
 )
 
 install(TARGETS ${LOCAL_BINNAME}

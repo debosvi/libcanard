@@ -32,6 +32,8 @@
 #include <stdbool.h>
 #include <assert.h>
 
+#include <libcanard.h>
+
 /// Build configuration header. Use it to provide your overrides.
 #if defined(CANARD_ENABLE_CUSTOM_BUILD_CONFIG) && CANARD_ENABLE_CUSTOM_BUILD_CONFIG
 # include "canard_build_config.h"
@@ -44,11 +46,6 @@ extern "C" {
 /// Libcanard version. API will be backwards compatible within the same major version.
 #define CANARD_VERSION_MAJOR                        0
 #define CANARD_VERSION_MINOR                        2
-
-/// By default this macro resolves to the standard assert(). The user can redefine this if necessary.
-#ifndef CANARD_ASSERT
-# define CANARD_ASSERT(x)   assert(x)
-#endif
 
 #define CANARD_GLUE(a, b)           CANARD_GLUE_IMPL_(a, b)
 #define CANARD_GLUE_IMPL_(a, b)     a##b
@@ -117,42 +114,6 @@ extern "C" {
 #define CANARD_TRANSFER_PAYLOAD_LEN_BITS            10U
 #define CANARD_MAX_TRANSFER_PAYLOAD_LEN             ((1U << CANARD_TRANSFER_PAYLOAD_LEN_BITS) - 1U)
 
-
-/**
- * This data type holds a standard CAN 2.0B data frame with 29-bit ID.
- */
-typedef struct
-{
-    /**
-     * Refer to the following definitions:
-     *  - CANARD_CAN_FRAME_EFF
-     *  - CANARD_CAN_FRAME_RTR
-     *  - CANARD_CAN_FRAME_ERR
-     */
-    uint32_t id;
-    uint8_t data[CANARD_CAN_FRAME_MAX_DATA_LEN];
-    uint8_t data_len;
-} CanardCANFrame;
-
-/**
- * Transfer types are defined by the UAVCAN specification.
- */
-typedef enum
-{
-    CanardTransferTypeResponse  = 0,
-    CanardTransferTypeRequest   = 1,
-    CanardTransferTypeBroadcast = 2
-} CanardTransferType;
-
-/**
- * Types of service transfers. These are not applicable to message transfers.
- */
-typedef enum
-{
-    CanardResponse,
-    CanardRequest
-} CanardRequestResponse;
-
 /*
  * Forward declarations.
  */
@@ -173,7 +134,7 @@ typedef struct CanardTxQueueItem CanardTxQueueItem;
 typedef bool (* CanardShouldAcceptTransfer)(const CanardInstance* ins,          ///< Library instance
                                             uint64_t* out_data_type_signature,  ///< Must be set by the application!
                                             uint16_t data_type_id,              ///< Refer to the specification
-                                            CanardTransferType transfer_type,   ///< Refer to CanardTransferType
+                                            const canard_transfer_t transfer_type,   ///< Refer to CanardTransferType
                                             uint8_t source_node_id);            ///< Source node ID or Broadcast (0)
 
 /**
@@ -183,7 +144,8 @@ typedef bool (* CanardShouldAcceptTransfer)(const CanardInstance* ins,          
  * buffer can be released and re-used by the TX queue.
  */
 typedef void (* CanardOnTransferReception)(CanardInstance* ins,                 ///< Library instance
-                                           CanardRxTransfer* transfer);         ///< Ptr to temporary transfer object
+                                           CanardRxTransfer* transfer,          ///< Ptr to temporary transfer object
+                                           const void* const item);
 
 /**
  * INTERNAL DEFINITION, DO NOT USE DIRECTLY.
@@ -402,7 +364,7 @@ int16_t canardRequestOrRespond(CanardInstance* ins,             ///< Library ins
                                uint8_t data_type_id,            ///< Refer to the specification
                                uint8_t* inout_transfer_id,      ///< Pointer to a persistent variable with transfer ID
                                uint8_t priority,                ///< Refer to definitions CANARD_TRANSFER_PRIORITY_*
-                               CanardRequestResponse kind,      ///< Refer to CanardRequestResponse
+                               canard_transfer_t kind,      ///< Refer to CanardRequestResponse
                                const void* payload,             ///< Transfer payload
                                uint16_t payload_len);           ///< Length of the above, in bytes
 
@@ -412,7 +374,7 @@ int16_t canardRequestOrRespond(CanardInstance* ins,             ///< Library ins
  * The application will call this function after canardBroadcast() or canardRequestOrRespond() to transmit generated
  * frames over the CAN bus.
  */
-const CanardCANFrame* canardPeekTxQueue(const CanardInstance* ins);
+const CAN_frame_t* canardPeekTxQueue(const CanardInstance* ins);
 
 /**
  * Removes the top priority frame from the TX queue.
@@ -429,8 +391,9 @@ void canardPopTxQueue(CanardInstance* ins);
  * Return value will report any errors in decoding packets.
  */
 int16_t canardHandleRxFrame(CanardInstance* ins,
-                            const CanardCANFrame* frame,
-                            uint64_t timestamp_usec);
+                            const CAN_frame_t* frame,
+                            uint64_t timestamp_usec,
+                            const void* const item);
 
 /**
  * Traverses the list of transfers and removes those that were last updated more than timeout_usec microseconds ago.
