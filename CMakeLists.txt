@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.10)
 project(libcanard)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -26,3 +26,10 @@ endif()
 
 add_subdirectory(src)
 add_subdirectory(test/sample)
+
+install(
+    DIRECTORY ${CMAKE_SOURCE_DIR}/include/
+    DESTINATION include/${CMAKE_PROJECT_NAME}
+    FILE_PERMISSIONS OWNER_READ GROUP_READ WORLD_READ
+    FILES_MATCHING PATTERN "*.h"
+) 
